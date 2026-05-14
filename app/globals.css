@@ -1,8 +1,9 @@
+@import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
 
 /**
  * Pocket — design tokens.
- *
+...
  * Six colours, locked. Two type families. Modular type scale (1.25). 4pt grid.
  * If a value isn't in this file, it doesn't belong on the canvas.
  */
