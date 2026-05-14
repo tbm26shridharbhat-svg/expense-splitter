@@ -8,17 +8,29 @@ const Schema = z.object({
   next: z.string().optional(),
 });
 
+/**
+ * Returns `devMagicLink` only when NODE_ENV !== "production". This lets the
+ * login page surface the link in-browser for local dev + the demo, where
+ * Resend's free tier only delivers to the account owner's email. Production
+ * never exposes the link — the only path is the email inbox.
+ */
 export async function requestMagicLinkAction(
   email: string,
   next?: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; devMagicLink?: string }
+  | { ok: false; error: string }
+> {
   const parsed = Schema.safeParse({ email, next });
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0].message };
   }
 
   try {
-    await requestMagicLink(parsed.data.email, parsed.data.next);
+    const link = await requestMagicLink(parsed.data.email, parsed.data.next);
+    if (process.env.NODE_ENV !== "production") {
+      return { ok: true, devMagicLink: link };
+    }
     return { ok: true };
   } catch (err) {
     console.error("[login] requestMagicLink failed:", err);

@@ -21,12 +21,17 @@ function generateToken(): string {
 /**
  * Step 1 — generate a token, store it, send the email.
  *
+ * Returns the magic-link URL so callers in non-production environments can
+ * surface it in-page when email delivery is constrained (e.g. Resend free tier
+ * only delivers to the account's own email). In production, the link returned
+ * here MUST NOT be exposed to the browser; the action gates that.
+ *
  * `next` is an optional path to redirect the user to after they verify. We
  * carry it through the magic-link URL so the invite-link round-trip works:
  * /join/X → /login?next=/join/X → email → /auth/verify?token=Y&next=/join/X
  * → set session → redirect to /join/X → group membership added.
  */
-export async function requestMagicLink(email: string, next?: string): Promise<void> {
+export async function requestMagicLink(email: string, next?: string): Promise<string> {
   await connectDB();
   const trimmed = email.trim().toLowerCase();
   const token = generateToken();
@@ -41,6 +46,7 @@ export async function requestMagicLink(email: string, next?: string): Promise<vo
     : `${baseUrl}/auth/verify?token=${token}`;
 
   await sendMagicLinkEmail(trimmed, link);
+  return link;
 }
 
 /**

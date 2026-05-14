@@ -31,16 +31,21 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [devLink, setDevLink] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (state === "sending") return;
     setState("sending");
     setError(null);
+    setDevLink(null);
 
     const result = await requestMagicLinkAction(email, next);
     if (result.ok) {
       setState("sent");
+      if ("devMagicLink" in result && result.devMagicLink) {
+        setDevLink(result.devMagicLink);
+      }
     } else {
       setState("error");
       setError(result.error);
@@ -55,7 +60,7 @@ function LoginForm() {
       </Link>
 
       {state === "sent" ? (
-        <SentPanel email={email} />
+        <SentPanel email={email} devLink={devLink} />
       ) : (
         <form onSubmit={handleSubmit} className="w-full max-w-sm flex flex-col gap-6">
           <div className="flex flex-col gap-2">
@@ -102,7 +107,7 @@ function LoginForm() {
   );
 }
 
-function SentPanel({ email }: { email: string }) {
+function SentPanel({ email, devLink }: { email: string; devLink: string | null }) {
   return (
     <div className="w-full max-w-sm flex flex-col gap-6 text-center items-center">
       <div className="size-12 rounded-full bg-accent/10 flex items-center justify-center text-accent text-xl">
@@ -111,9 +116,29 @@ function SentPanel({ email }: { email: string }) {
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Check your inbox</h1>
         <p className="text-ink/65 text-sm">
-          We sent a magic link to <strong className="text-ink">{email}</strong>. It's valid for 15 minutes.
+          We sent a magic link to <strong className="text-ink">{email}</strong>. It&apos;s valid for 15 minutes.
         </p>
       </div>
+
+      {devLink && (
+        <div className="w-full bg-card border border-dashed border-hairline rounded-2xl p-4 flex flex-col gap-3 text-left">
+          <div className="flex items-center gap-2">
+            <span className="text-xs px-2 py-0.5 rounded bg-accent/10 text-accent font-medium uppercase tracking-wide">
+              Dev
+            </span>
+            <span className="text-xs text-ink/55">
+              Email delivery may be restricted on the free tier — sign in directly:
+            </span>
+          </div>
+          <Link
+            href={devLink}
+            className="text-sm font-medium text-accent underline break-all"
+          >
+            Sign in
+          </Link>
+        </div>
+      )}
+
       <p className="text-xs text-ink/45">
         Wrong email? <Link href="/login" className="underline">Try again.</Link>
       </p>
