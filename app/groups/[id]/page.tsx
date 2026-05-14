@@ -1,12 +1,5 @@
 /**
  * /groups/[id] — group detail.
- *
- * Tonight's scope: prove the routing + permission check work end-to-end.
- *   - Show group name, member count, balance placeholder
- *   - 404 if group doesn't exist or user isn't a member
- *
- * Tomorrow's scope (Phase 6): expense list, add-expense flow, settle-up button,
- * real balance computation via the projection.
  */
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
@@ -17,6 +10,9 @@ import { connectDB, Group, Membership, User, BalanceView, Event } from "@/lib/db
 import { InviteSection } from "./invite-section";
 import { formatAmount } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
+import { ExpenseThread } from "./expenses/expense-thread";
+import { getSettleUpNudge } from "@/lib/events/nudge";
+import { SettleUpNudge } from "./nudge";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -26,12 +22,10 @@ export default async function GroupDetailPage({ params }: PageProps) {
   const session = await requireSession();
   const { id } = await params;
 
-  // Validate ObjectId shape before hitting Mongo (avoids a CastError 500)
   if (!Types.ObjectId.isValid(id)) notFound();
 
   await connectDB();
 
-  // Must be a current member to view
   const ownMembership = await Membership.findOne({
     groupId: id,
     userId: session.userId,
@@ -48,7 +42,6 @@ export default async function GroupDetailPage({ params }: PageProps) {
     .select({ email: 1, name: 1 })
     .lean();
 
-  // Build the absolute invite URL (works in dev + prod)
   const h = await headers();
   const proto = h.get("x-forwarded-proto") ?? "http";
   const host = h.get("host") ?? "localhost:3000";
@@ -56,7 +49,6 @@ export default async function GroupDetailPage({ params }: PageProps) {
     ? `${proto}://${host}/join/${group.shareToken}`
     : null;
 
-  // Current user's balance (defaults to 0 if no expenses yet)
   const userIdToName = new Map(
     members.map((m) => [String(m._id), m.name ?? m.email]),
   );
@@ -66,8 +58,9 @@ export default async function GroupDetailPage({ params }: PageProps) {
     currency: group.baseCurrency,
   }).lean();
   const balanceAmount = myBalance?.amount ?? 0;
+  
+  const nudge = await getSettleUpNudge(id);
 
-  // Recent expenses (last 10) — read directly from the event log
   const recentExpenses = await Event.find({
     groupId: id,
     type: "expense_added",
@@ -75,6 +68,26 @@ export default async function GroupDetailPage({ params }: PageProps) {
     .sort({ createdAt: -1 })
     .limit(10)
     .lean();
+
+  const expenseIds = recentExpenses.map((e) => (e.payload as any).expenseId);
+  const comments = await Event.find({
+    groupId: id,
+    type: "expense_commented",
+    "payload.expenseId": { $in: expenseIds },
+  })
+    .sort({ createdAt: 1 })
+    .lean();
+  
+  const commentsByExpense = new Map<string, any[]>();
+  comments.forEach(c => {
+    const eid = (c.payload as any).expenseId;
+    if (!commentsByExpense.has(eid)) commentsByExpense.set(eid, []);
+    commentsByExpense.get(eid)!.push({
+      text: (c.payload as any).text,
+      createdAt: c.createdAt,
+      actorUserId: String(c.actorUserId),
+    });
+  });
 
   return (
     <main className="min-h-dvh flex flex-col px-5 pt-6 pb-12 sm:px-12">
@@ -119,12 +132,17 @@ export default async function GroupDetailPage({ params }: PageProps) {
           </p>
         </section>
 
+        {nudge && nudge.userId === session.userId && (
+          <SettleUpNudge amount={nudge.amount} />
+        )}
+
         {recentExpenses.length > 0 && (
           <section className="flex flex-col gap-3">
             <h2 className="text-xs uppercase tracking-wide text-ink/55">Recent</h2>
             <ul className="flex flex-col gap-2">
               {recentExpenses.map((e) => {
                 const p = e.payload as {
+                  expenseId: string;
                   description: string;
                   totalAmount: number;
                   currency: string;
@@ -135,18 +153,27 @@ export default async function GroupDetailPage({ params }: PageProps) {
                 return (
                   <li
                     key={String(e._id)}
-                    className="bg-card border border-hairline rounded-xl p-4 flex items-start justify-between gap-3"
+                    className="bg-card border border-hairline rounded-xl p-4 flex flex-col"
                   >
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <span className="text-sm font-medium truncate">{p.description}</span>
-                      <span className="text-xs text-ink/55">
-                        {payerName} paid · split {p.splits.length} ways ·{" "}
-                        {formatDistanceToNow(new Date(e.createdAt), { addSuffix: true })}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className="text-sm font-medium truncate">{p.description}</span>
+                        <span className="text-xs text-ink/55">
+                          {payerName} paid · split {p.splits.length} ways ·{" "}
+                          {formatDistanceToNow(new Date(e.createdAt), { addSuffix: true })}
+                        </span>
+                      </div>
+                      <span className="amount text-sm font-medium tabular text-ink/85 whitespace-nowrap">
+                        {formatAmount(p.totalAmount, p.currency)}
                       </span>
                     </div>
-                    <span className="amount text-sm font-medium tabular text-ink/85 whitespace-nowrap">
-                      {formatAmount(p.totalAmount, p.currency)}
-                    </span>
+                    
+                    <ExpenseThread
+                      groupId={id}
+                      expenseId={p.expenseId}
+                      comments={commentsByExpense.get(p.expenseId) ?? []}
+                      userMap={userIdToName}
+                    />
                   </li>
                 );
               })}
