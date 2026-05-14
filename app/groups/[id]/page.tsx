@@ -45,10 +45,9 @@ export default async function GroupDetailPage({ params }: PageProps) {
     .lean();
 
   const h = await headers();
-  const proto = h.get("x-forwarded-proto") ?? "http";
   const host = h.get("host") ?? "localhost:3000";
   const inviteUrl = group.shareToken
-    ? `${proto}://${host}/join/${group.shareToken}`
+    ? `https://${host}/join/${group.shareToken}`
     : null;
 
   const userIdToName: Record<string, string> = {};
