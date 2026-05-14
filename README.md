@@ -3,9 +3,9 @@
 > Case 2 of the Fresher Day-Project case study. Small group expense splitter
 > with optimal-netting math, an event-sourced ledger, and one-tap settlements.
 
-**Live demo:** _(replace with Vercel URL after deploy)_
-**Repo:** _(replace with GitHub URL)_
-**Demo video:** _(replace with Loom/YouTube link)_
+**Live demo:** _(Vercel URL — added after deploy)_
+**Repo:** <https://github.com/tbm26shridharbhat-svg/expense-splitter>
+**Demo video:** _(Loom URL — added after recording)_
 
 ## The reframe
 
@@ -94,6 +94,30 @@ Greedy minimum-edges algorithm with property-based tests asserting four invarian
 
 Each property is verified across 1,000 randomly generated balance maps. See
 [`lib/netting.test.ts`](./lib/netting.test.ts).
+
+## How I'd handle currency conversion if this went international
+
+*(Required by the brief. Multi-currency is scaffolded in the schema; the UI ships single-currency for the MVP. Here's the production design.)*
+
+The fundamental design choice — and the one Splitwise got wrong for years — is **when** the FX rate is captured. Two options:
+
+1. **Capture rate at settlement time.** Cleanest for the user UX in a single moment ("how much do I owe right now?"), but FX moves between expense and settlement. Two friends who split a $50 dinner on Mar 10 ($1 = ₹83) settle on Mar 24 ($1 = ₹85): the second friend now owes less in INR than the dinner actually cost. Compounded across many small expenses, this drifts.
+
+2. **Capture rate at expense time, lock it for life.** Every expense event stores `fxRateToBase` at the moment of creation. Once written, never updated. At settlement time, the system uses the *captured* rates, not today's rates. The friend owes exactly what was spent, in the agreed base currency.
+
+Pocket commits to option (2). The schema already supports it — every `expense_added` event has a `currency` and `fxRateToBase` field; the projection stores the base-currency amount. The user-facing UI shows both the original currency (in the expense detail) and the base-currency balance (in the group total).
+
+**Sourcing the rate.** A free FX API (e.g., open.er-api.com, exchangerate-api.com free tier) is sufficient for non-critical conversions. Three production hardening steps:
+
+- Cache rates aggressively. The rate at any past time is fixed; we only need a fresh quote once per request session for new expenses.
+- Fall back to a stored daily-close rate if the API is down. Slightly stale beats failing the user's expense entry.
+- Show the rate in the UI when the user adds a foreign-currency expense, with a "use this rate" confirmation. Surprises ruin trust.
+
+**Settlement in mixed currencies.** When a group has expenses in USD, EUR, and INR (with INR as the base), `balances_view` stores per-currency rows. The settle-up algorithm operates on base-currency balances. Settlement events record the executed currency + the rate at execution time, so reconciliation works the same way.
+
+**The corner case worth flagging.** If two users agree to a settlement amount in USD but rates shift between confirming the amount and the actual transfer (e.g., a UPI vs. wire delay), the captured rate locks the *intended* number, not the *executed* one. A real money-transfer integration would need a two-phase commit pattern — propose the conversion, lock it for N minutes, execute against the locked quote.
+
+For Pocket's MVP, single-currency means none of this is exercised — the design is documented; the wiring is half done; the production version is two days of focused work.
 
 ## License
 
