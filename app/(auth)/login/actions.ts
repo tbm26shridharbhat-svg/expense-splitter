@@ -4,6 +4,7 @@ import { z } from "zod";
 import { connectDB, User } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { setSessionCookie } from "@/lib/auth/session";
+import { redirect } from "next/navigation";
 
 const IdentifySchema = z.object({
   email: z.string().email(),
@@ -31,7 +32,7 @@ export async function signupAction(prevState: any, formData: FormData): Promise<
   const user = await User.create({ ...parsed.data, passwordHash });
   
   await setSessionCookie({ userId: user._id.toString(), email: user.email });
-  return {};
+  redirect("/groups");
 }
 
 const LoginSchema = z.object({
@@ -50,5 +51,5 @@ export async function loginAction(prevState: any, formData: FormData): Promise<{
   }
   
   await setSessionCookie({ userId: user._id.toString(), email: user.email });
-  return {};
+  redirect("/groups");
 }
