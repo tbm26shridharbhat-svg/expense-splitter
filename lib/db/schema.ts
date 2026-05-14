@@ -17,29 +17,13 @@ const userSchema = new Schema(
   {
     email: { type: String, required: true, unique: true, index: true, lowercase: true, trim: true },
     name: { type: String },
+    passwordHash: { type: String },
   },
   { timestamps: true, collection: "users" },
 );
 
 export const User = (models.User as mongoose.Model<InferSchemaType<typeof userSchema>>) ?? model("User", userSchema);
 export type UserDoc = InferSchemaType<typeof userSchema>;
-
-// ---------- AUTH ----------
-const loginTokenSchema = new Schema(
-  {
-    token: { type: String, required: true, unique: true, index: true },
-    email: { type: String, required: true, lowercase: true, trim: true },
-    expiresAt: { type: Date, required: true },
-    consumedAt: { type: Date, default: null },
-  },
-  { collection: "login_tokens" },
-);
-// Auto-cleanup expired tokens (TTL index, on Mongo's background sweep)
-loginTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-
-export const LoginToken =
-  (models.LoginToken as mongoose.Model<InferSchemaType<typeof loginTokenSchema>>) ?? model("LoginToken", loginTokenSchema);
-export type LoginTokenDoc = InferSchemaType<typeof loginTokenSchema>;
 
 // ---------- GROUPS ----------
 const groupSchema = new Schema(

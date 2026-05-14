@@ -12,30 +12,27 @@ const Schema = z.object({
   description: z.string().min(1, "What was it for?").max(200),
   amount: z.number().positive("Amount must be > 0"),
   paidByUserId: z.string().min(1),
-  splitUserIds: z.array(z.string()).min(1, "Pick at least one person to split with"),
+  splits: z.array(z.object({
+    userId: z.string(),
+    amount: z.number()
+  })).min(1, "Pick at least one person to split with"),
 });
 
-/**
- * Add an expense. Equal split among the chosen members.
- *
- * Two writes:
- *   1. Append the expense_added event (audit trail, source of truth)
- *   2. Update the balances projection
- *
- * Idempotency: callers can pass a clientEventId; the unique sparse index on
- * `events.clientEventId` makes the same submission a no-op on retry. We use
- * a UUID per form render below.
- */
 export async function addExpenseAction(groupId: string, formData: FormData): Promise<void> {
   const session = await requireSession();
   if (!Types.ObjectId.isValid(groupId)) throw new Error("Bad group id");
 
   const splitUserIds = formData.getAll("splitUserIds").map(String);
+  const splits = splitUserIds.map(userId => ({
+    userId,
+    amount: Number(formData.get(`splitAmount_${userId}`) ?? 0)
+  }));
+
   const parsed = Schema.safeParse({
     description: String(formData.get("description") ?? "").trim(),
     amount: Number(formData.get("amount") ?? 0),
     paidByUserId: String(formData.get("paidByUserId") ?? ""),
-    splitUserIds,
+    splits,
   });
 
   if (!parsed.success) {
@@ -43,9 +40,14 @@ export async function addExpenseAction(groupId: string, formData: FormData): Pro
     throw new Error(parsed.error.issues[0].message);
   }
 
+  // Validate sum of splits equals total amount (within rounding)
+  const totalSplit = parsed.data.splits.reduce((sum, s) => sum + s.amount, 0);
+  if (Math.abs(totalSplit - parsed.data.amount) > 0.01) {
+    throw new Error(`Splits don't add up to the total. Total: ${parsed.data.amount}, Splits: ${totalSplit.toFixed(2)}`);
+  }
+
   await connectDB();
 
-  // Caller must be a member of the group
   const isMember = await Membership.exists({
     groupId,
     userId: session.userId,
@@ -53,7 +55,6 @@ export async function addExpenseAction(groupId: string, formData: FormData): Pro
   });
   if (!isMember) throw new Error("Not a member of this group");
 
-  // The payer must be a current member too
   const payerOk = await Membership.exists({
     groupId,
     userId: parsed.data.paidByUserId,
@@ -64,16 +65,6 @@ export async function addExpenseAction(groupId: string, formData: FormData): Pro
   const group = await Group.findById(groupId).lean();
   if (!group) throw new Error("Group not found");
 
-  // Equal split — round each share to 2dp; any residual goes onto the first split
-  const n = parsed.data.splitUserIds.length;
-  const share = Math.round((parsed.data.amount / n) * 100) / 100;
-  const splits = parsed.data.splitUserIds.map((userId) => ({ userId, amount: share }));
-  const totalSoFar = share * n;
-  const residual = Math.round((parsed.data.amount - totalSoFar) * 100) / 100;
-  if (residual !== 0 && splits.length > 0) {
-    splits[0].amount = Math.round((splits[0].amount + residual) * 100) / 100;
-  }
-
   const clientEventId = formData.get("clientEventId");
   const payload = {
     expenseId: new Types.ObjectId().toString(),
@@ -81,12 +72,11 @@ export async function addExpenseAction(groupId: string, formData: FormData): Pro
     currency: group.baseCurrency,
     fxRateToBase: 1.0,
     paidByUserId: parsed.data.paidByUserId,
-    splits,
+    splits: parsed.data.splits,
     totalAmount: parsed.data.amount,
     expenseTimestamp: new Date().toISOString(),
   };
 
-  // 1. Append event — idempotent via clientEventId unique index
   try {
     await Event.create({
       groupId,
@@ -98,14 +88,12 @@ export async function addExpenseAction(groupId: string, formData: FormData): Pro
   } catch (err: unknown) {
     const e = err as { code?: number };
     if (e.code === 11000) {
-      // Duplicate clientEventId — already processed. Silent no-op (the goal).
       revalidatePath(`/groups/${groupId}`);
       redirect(`/groups/${groupId}`);
     }
     throw err;
   }
 
-  // 2. Update the balances projection
   await applyExpenseAdded(groupId, payload);
 
   revalidatePath(`/groups/${groupId}`);

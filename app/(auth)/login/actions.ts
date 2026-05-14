@@ -1,42 +1,68 @@
 "use server";
 
 import { z } from "zod";
-import { requestMagicLink } from "@/lib/auth/magic-link";
+import { connectDB, User } from "@/lib/db";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { setSessionCookie } from "@/lib/auth/session";
+import { redirect } from "next/navigation";
 
 const Schema = z.object({
   email: z.string().email("Enter a valid email."),
+  password: z.string().min(6, "Password must be at least 6 characters."),
   next: z.string().optional(),
 });
 
-/**
- * Returns `devMagicLink` only when NODE_ENV !== "production". This lets the
- * login page surface the link in-browser for local dev + the demo, where
- * Resend's free tier only delivers to the account owner's email. Production
- * never exposes the link — the only path is the email inbox.
- */
-export async function requestMagicLinkAction(
-  email: string,
-  next?: string,
-): Promise<
-  | { ok: true; devMagicLink?: string }
-  | { ok: false; error: string }
-> {
-  const parsed = Schema.safeParse({ email, next });
+export async function authAction(
+  prevState: any,
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const rawEmail = formData.get("email") as string;
+  const rawPassword = formData.get("password") as string;
+  const next = formData.get("next") as string || "/groups";
+
+  const parsed = Schema.safeParse({ email: rawEmail, password: rawPassword, next });
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0].message };
+    return { error: parsed.error.issues[0].message };
   }
 
+  const { email, password } = parsed.data;
+
   try {
-    const link = await requestMagicLink(parsed.data.email, parsed.data.next);
-    if (process.env.NODE_ENV !== "production") {
-      return { ok: true, devMagicLink: link };
+    await connectDB();
+    
+    let user = await User.findOne({ email });
+
+    if (user) {
+      // Login attempt
+      if (!user.passwordHash) {
+        // Handle legacy users who used magic links
+        // For simplicity, let's set their password now
+        user.passwordHash = await hashPassword(password);
+        await user.save();
+      } else {
+        const isValid = await verifyPassword(password, user.passwordHash);
+        if (!isValid) {
+          return { error: "Invalid email or password." };
+        }
+      }
+    } else {
+      // Signup
+      const passwordHash = await hashPassword(password);
+      user = await User.create({
+        email,
+        passwordHash,
+        name: email.split("@")[0], // Default name from email
+      });
     }
-    return { ok: true };
+
+    await setSessionCookie({
+      userId: user._id.toString(),
+      email: user.email,
+    });
   } catch (err) {
-    console.error("[login] requestMagicLink failed:", err);
-    return {
-      ok: false,
-      error: "We couldn't send the link. Try again in a minute.",
-    };
+    console.error("[auth] action failed:", err);
+    return { error: "Something went wrong. Please try again." };
   }
+
+  redirect(next);
 }
