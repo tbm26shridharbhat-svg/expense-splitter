@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
 
 /**
  * Pocket — design tokens.
@@ -17,8 +17,8 @@
   --color-hairline: #e2e8f0;   /* dividers */
 
   /* ---------- Typography ---------- */
-  --font-display: "Inter Tight", system-ui, -apple-system, sans-serif;
-  --font-sans:    "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Outfit", system-ui, -apple-system, sans-serif;
+  --font-sans:    "Outfit", system-ui, -apple-system, sans-serif;
 
   /* Type scale — modular 1.25 */
   --text-xs:   12px;
@@ -40,6 +40,10 @@
   --spacing-12: 48px;
   --spacing-16: 64px;
   --spacing-24: 96px;
+
+  /* ---------- Shadows ---------- */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 }
 
 /* Tabular numbers everywhere a money amount appears */

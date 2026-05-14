@@ -13,6 +13,7 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function formatAmount(value: number | string, currency = "INR"): string {
   const num = typeof value === "string" ? parseFloat(value) : value;
-  if (currency === "INR") return `₹${num.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-  return `${currency} ${num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const rounded = Math.round(num);
+  if (currency === "INR") return `₹${rounded.toLocaleString("en-IN")}`;
+  return `${currency} ${rounded.toLocaleString("en-US")}`;
 }
