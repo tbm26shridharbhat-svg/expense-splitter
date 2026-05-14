@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useRef } from "react";
+import { useActionState, useRef, useTransition } from "react";
 import { addCommentAction } from "./comment-actions";
+import { voidExpenseAction } from "./void-actions";
 
 interface Comment {
   text: string;
@@ -19,11 +20,19 @@ interface ExpenseThreadProps {
 export function ExpenseThread({ groupId, expenseId, comments, userMap }: ExpenseThreadProps) {
   const [_, formAction, isPending] = useActionState(addCommentAction, {});
   const formRef = useRef<HTMLFormElement>(null);
+  const [isVoidPending, startVoidTransition] = useTransition();
 
   return (
     <div className="flex flex-col gap-3 mt-3 pt-3 border-t border-hairline">
+      <button
+        onClick={() => startVoidTransition(() => voidExpenseAction(groupId, expenseId))}
+        disabled={isVoidPending}
+        className="text-xs text-debt"
+      >
+        Void Expense
+      </button>
       <ul className="flex flex-col gap-2">
-        {comments.map((c, i) => (
+        {comments.map((c: Comment, i: number) => (
           <li key={i} className="text-xs text-ink/70">
             <span className="font-semibold">{userMap.get(c.actorUserId)}</span>: {c.text}
           </li>
