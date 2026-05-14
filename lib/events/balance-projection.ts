@@ -4,24 +4,8 @@
  * Given an event, applies the balance delta to BalanceView. Pure-ish: takes an
  * event payload, computes the (userId → delta) map, and applies it via $inc
  * upserts.
- *
- * The math, by event type:
- *
- *   expense_added:
- *     payer:      balance += totalAmount   (they paid out of pocket)
- *     each split: balance -= split.amount  (they owe their share)
- *
- *     Sums to zero by construction:
- *       sum(splits) == totalAmount  →  net delta across all users == 0
- *
- *   settlement_made:
- *     fromUser:   balance += amount   (they paid their debt; balance moves toward 0)
- *     toUser:     balance -= amount   (their credit reduced)
- *
- *   expense_voided / corrected: not implemented tonight; tomorrow's projection
- *   can either rewind the original event or apply an inverse delta event.
  */
-import { connectDB, BalanceView } from "@/lib/db";
+import { connectDB, BalanceView, Event } from "@/lib/db";
 
 interface ExpenseAddedPayload {
   totalAmount: number;
@@ -44,9 +28,8 @@ export async function applyExpenseAdded(
 ): Promise<void> {
   await connectDB();
 
-  // Accumulate deltas per user so a payer who is also a splittee gets one net update
   const deltas = new Map<string, number>();
-  deltas.set(payload.paidByUserId, payload.totalAmount); // payer paid
+  deltas.set(payload.paidByUserId, payload.totalAmount); 
 
   for (const split of payload.splits) {
     const cur = deltas.get(split.userId) ?? 0;
@@ -84,4 +67,38 @@ export async function applySettlementMade(
       { upsert: true, new: true },
     ),
   ]);
+}
+
+/** Apply an expense_voided event. */
+export async function applyExpenseVoided(groupId: string, payload: { expenseId: string }): Promise<void> {
+  await connectDB();
+  const originalEvent = await Event.findOne({
+    groupId,
+    type: "expense_added",
+    "payload.expenseId": payload.expenseId,
+  }).lean();
+
+  if (!originalEvent) return;
+
+  const originalPayload = originalEvent.payload as ExpenseAddedPayload;
+
+  // Reverse delta
+  const deltas = new Map<string, number>();
+  deltas.set(originalPayload.paidByUserId, -originalPayload.totalAmount); 
+
+  for (const split of originalPayload.splits) {
+    const cur = deltas.get(split.userId) ?? 0;
+    deltas.set(split.userId, cur + split.amount);
+  }
+
+  const updatedAt = new Date();
+  await Promise.all(
+    [...deltas.entries()].map(([userId, delta]) =>
+      BalanceView.findOneAndUpdate(
+        { groupId, userId, currency: originalPayload.currency },
+        { $inc: { amount: delta }, $set: { updatedAt } },
+        { upsert: true, new: true },
+      ),
+    ),
+  );
 }

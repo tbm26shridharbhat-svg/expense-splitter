@@ -5,19 +5,22 @@ import { identifyUserAction, loginAction, signupAction } from "./actions";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const [step, setStep] = useState<"identify" | "login" | "signup">("identify");
+  const [step, setStep] = useState<"identify" | "login" | "signup" | "loading">("identify");
   const [email, setEmail] = useState("");
   const [loginState, loginFormAction, isLoginPending] = useActionState(loginAction, {});
   const [signupState, signupFormAction, isSignupPending] = useActionState(signupAction, {});
 
   async function handleIdentify(e: React.FormEvent) {
     e.preventDefault();
+    setStep("loading"); // Added loading state
     const { exists } = await identifyUserAction(email);
     setStep(exists ? "login" : "signup");
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
+    <div className="flex items-center justify-center min-h-screen p-6">
+      {step === "loading" && <div className="w-full max-w-sm h-48 bg-card rounded-2xl border animate-pulse" />}
+      
       {step === "identify" && (
         <form onSubmit={handleIdentify} className="w-full max-w-sm p-6 bg-card rounded-2xl border">
           <h1 className="text-2xl font-bold mb-4">Welcome</h1>
@@ -25,6 +28,7 @@ export default function LoginPage() {
           <button type="submit" className="w-full h-12 bg-accent text-white rounded-xl">Continue</button>
         </form>
       )}
+
 
       {step === "login" && (
         <form action={loginFormAction} className="w-full max-w-sm p-6 bg-card rounded-2xl border">

@@ -26,6 +26,39 @@ const userSchema = new Schema(
 export const User = (models.User as mongoose.Model<InferSchemaType<typeof userSchema>>) ?? model("User", userSchema);
 export type UserDoc = InferSchemaType<typeof userSchema>;
 
+// ---------- GOALS ----------
+const goalSchema = new Schema(
+  {
+    groupId: { type: Schema.Types.ObjectId, ref: "Group", required: true, index: true },
+    description: { type: String, required: true },
+    targetAmount: { type: Number, required: true },
+    currentAmount: { type: Number, default: 0 },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { collection: "goals" },
+);
+
+export const Goal = (models.Goal as mongoose.Model<InferSchemaType<typeof goalSchema>>) ?? model("Goal", goalSchema);
+export type GoalDoc = InferSchemaType<typeof goalSchema>;
+
+// ---------- RECURRING EXPENSES ----------
+const recurringExpenseSchema = new Schema(
+  {
+    groupId: { type: Schema.Types.ObjectId, ref: "Group", required: true, index: true },
+    description: { type: String, required: true },
+    amount: { type: Number, required: true },
+    paidByUserId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    frequency: { type: String, enum: ["monthly"], default: "monthly" },
+    nextRunDate: { type: Date, required: true },
+  },
+  { collection: "recurring_expenses" },
+);
+
+export const RecurringExpense =
+  (models.RecurringExpense as mongoose.Model<InferSchemaType<typeof recurringExpenseSchema>>) ??
+  model("RecurringExpense", recurringExpenseSchema);
+export type RecurringExpenseDoc = InferSchemaType<typeof recurringExpenseSchema>;
+
 // ---------- GROUPS ----------
 const groupSchema = new Schema(
   {
