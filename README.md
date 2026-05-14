@@ -24,8 +24,8 @@ that reframe.
 |---|---|---|
 | Framework | Next.js 16 (App Router, Server Actions) | The default — fine; the architecture is the differentiator |
 | Language | TypeScript strict | Type-safe end-to-end |
-| DB | Neon Postgres | Branchable, free tier, real relational store |
-| ORM | Drizzle (NOT Prisma) | Lightweight, no runtime, type-safe |
+| DB | MongoDB Atlas (M0 free tier) | Document model fits event-sourced payloads natively |
+| ODM | Mongoose | Typed schemas, TTL indexes, atomic findOneAndUpdate for idempotent token consumption |
 | Auth | Custom magic-link via Resend (NOT NextAuth) | Explicit control over session lifetime + cookie attributes |
 | Email | Resend | Free tier, 1k emails/month |
 | State | TanStack Query + React 19 `useOptimistic` | Optimistic UI, auto-revalidation |
@@ -48,16 +48,12 @@ npm install
 
 # 2. Set up environment
 cp .env.example .env.local
-# Fill in DATABASE_URL (Neon), RESEND_API_KEY, SESSION_SECRET (any 32+ char string)
+# Fill in MONGODB_URI (Atlas), RESEND_API_KEY, SESSION_SECRET (any 32+ char string)
 
-# 3. Generate + push the schema
-npm run db:generate
-npm run db:push
-
-# 4. (Optional) Seed a demo group
+# 3. (Optional) Seed a demo group — Mongoose creates collections on first write
 npm run db:seed
 
-# 5. Start dev server
+# 4. Start dev server
 npm run dev
 ```
 

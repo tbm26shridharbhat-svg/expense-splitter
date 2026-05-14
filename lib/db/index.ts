@@ -1,32 +1,42 @@
 /**
- * Neon Postgres client — Drizzle ORM on the HTTP driver.
+ * Mongoose connection helper.
  *
- * Why HTTP and not the WebSocket driver: Vercel serverless functions are short-
- * lived and don't benefit from a persistent socket pool. The HTTP driver fits
- * the request lifecycle, doesn't leak connections, and works in the Edge
- * runtime if we ever route something there.
+ * Pattern is the standard Next.js cached-global trick: reuse the same connection
+ * across requests so we don't open a new socket per server-action invocation,
+ * which would exhaust Atlas's connection limit immediately on hot routes.
  */
-import { drizzle, type NeonHttpDatabase } from "drizzle-orm/neon-http";
-import { neon } from "@neondatabase/serverless";
-import * as schema from "./schema";
+import mongoose from "mongoose";
 
-// Lazy: build steps don't need a DB; only request handlers do.
-let cached: NeonHttpDatabase<typeof schema> | null = null;
+type Cached = {
+  conn: typeof mongoose | null;
+  promise: Promise<typeof mongoose> | null;
+};
 
-function getDb(): NeonHttpDatabase<typeof schema> {
-  if (cached) return cached;
-  const url = process.env.DATABASE_URL;
-  if (!url) {
-    throw new Error("DATABASE_URL is not set. Copy .env.example -> .env.local.");
-  }
-  cached = drizzle(neon(url), { schema });
-  return cached;
+declare global {
+  // eslint-disable-next-line no-var
+  var __mongooseCache: Cached | undefined;
 }
 
-export const db = new Proxy({} as NeonHttpDatabase<typeof schema>, {
-  get(_target, prop) {
-    return Reflect.get(getDb(), prop);
-  },
-});
+const cache: Cached = global.__mongooseCache ?? { conn: null, promise: null };
+if (!global.__mongooseCache) global.__mongooseCache = cache;
 
+export async function connectDB(): Promise<typeof mongoose> {
+  if (cache.conn) return cache.conn;
+
+  if (!cache.promise) {
+    const uri = process.env.MONGODB_URI;
+    if (!uri) {
+      throw new Error("MONGODB_URI is not set. Copy .env.example -> .env.local.");
+    }
+    cache.promise = mongoose.connect(uri, {
+      bufferCommands: false,
+      serverSelectionTimeoutMS: 5000,
+    });
+  }
+
+  cache.conn = await cache.promise;
+  return cache.conn;
+}
+
+// Re-export the models so callers can `import { User, Event, ... } from "@/lib/db"`
 export * from "./schema";
