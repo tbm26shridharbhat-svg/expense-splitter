@@ -9,6 +9,7 @@
  * Mongo's TTL index on `expiresAt` cleans up old tokens automatically.
  */
 import { randomBytes } from "node:crypto";
+import { headers } from "next/headers";
 import { connectDB, LoginToken, User } from "@/lib/db";
 import { sendMagicLinkEmail } from "./email";
 
@@ -16,6 +17,31 @@ const TOKEN_TTL_MS = 15 * 60 * 1000;
 
 function generateToken(): string {
   return randomBytes(16).toString("hex");
+}
+
+/**
+ * Resolve the app's public base URL at runtime. Three sources in priority order:
+ *
+ *   1. NEXT_PUBLIC_APP_URL  — explicit override; useful if you've set a custom domain
+ *   2. Request headers      — works on Vercel (X-Forwarded-Proto + Host) AND localhost;
+ *                             auto-tracks preview deployment URLs too
+ *   3. localhost fallback   — for headless scripts that don't have a request context
+ *
+ * Using request headers as the default removes the deploy chicken-and-egg: you can
+ * ship to Vercel without first knowing the URL.
+ */
+async function resolveBaseUrl(): Promise<string> {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+
+  try {
+    const h = await headers();
+    const proto = h.get("x-forwarded-proto") ?? "http";
+    const host = h.get("host");
+    if (host) return `${proto}://${host}`;
+  } catch {
+    // headers() throws outside a request context (e.g., build-time)
+  }
+  return "http://localhost:3000";
 }
 
 /**
@@ -39,7 +65,7 @@ export async function requestMagicLink(email: string, next?: string): Promise<st
 
   await LoginToken.create({ token, email: trimmed, expiresAt });
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const baseUrl = await resolveBaseUrl();
   const safeNext = sanitizeNext(next);
   const link = safeNext
     ? `${baseUrl}/auth/verify?token=${token}&next=${encodeURIComponent(safeNext)}`
