@@ -18,8 +18,15 @@ function generateToken(): string {
   return randomBytes(16).toString("hex");
 }
 
-/** Step 1 — generate a token, store it, send the email. */
-export async function requestMagicLink(email: string): Promise<void> {
+/**
+ * Step 1 — generate a token, store it, send the email.
+ *
+ * `next` is an optional path to redirect the user to after they verify. We
+ * carry it through the magic-link URL so the invite-link round-trip works:
+ * /join/X → /login?next=/join/X → email → /auth/verify?token=Y&next=/join/X
+ * → set session → redirect to /join/X → group membership added.
+ */
+export async function requestMagicLink(email: string, next?: string): Promise<void> {
   await connectDB();
   const trimmed = email.trim().toLowerCase();
   const token = generateToken();
@@ -28,9 +35,24 @@ export async function requestMagicLink(email: string): Promise<void> {
   await LoginToken.create({ token, email: trimmed, expiresAt });
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const link = `${baseUrl}/auth/verify?token=${token}`;
+  const safeNext = sanitizeNext(next);
+  const link = safeNext
+    ? `${baseUrl}/auth/verify?token=${token}&next=${encodeURIComponent(safeNext)}`
+    : `${baseUrl}/auth/verify?token=${token}`;
 
   await sendMagicLinkEmail(trimmed, link);
+}
+
+/**
+ * Only allow same-origin relative paths as `next` — prevents open-redirect attacks
+ * where an attacker sends a login link with `?next=https://evil.com` to phish.
+ */
+export function sanitizeNext(next: string | undefined | null): string | null {
+  if (!next) return null;
+  if (!next.startsWith("/")) return null;       // must be a path
+  if (next.startsWith("//")) return null;       // protocol-relative URLs are out
+  if (next.startsWith("/auth/")) return null;   // don't bounce back into auth
+  return next;
 }
 
 /**

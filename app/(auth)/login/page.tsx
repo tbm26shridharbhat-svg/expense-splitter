@@ -1,8 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { requestMagicLinkAction } from "./actions";
+
+// Wrap the form in Suspense — Next.js requires this for useSearchParams in client
+// components so the build doesn't fail trying to prerender it statically.
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
 
 /**
  * Login — single email field. Server action handles the request.
@@ -10,8 +21,13 @@ import { requestMagicLinkAction } from "./actions";
  * UX choice: on success, swap the form for a confirmation panel in-place.
  * Don't navigate. Don't reload. Don't show a popup. The user just sees their
  * own email confirmed back to them and instructions for what's next.
+ *
+ * `?next=<path>` in the URL is carried through to the magic-link itself,
+ * so /join/<token> invitations bounce cleanly: invite → login → email → in.
  */
-export default function LoginPage() {
+function LoginForm() {
+  const params = useSearchParams();
+  const next = params.get("next") ?? undefined;
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +38,7 @@ export default function LoginPage() {
     setState("sending");
     setError(null);
 
-    const result = await requestMagicLinkAction(email);
+    const result = await requestMagicLinkAction(email, next);
     if (result.ok) {
       setState("sent");
     } else {
