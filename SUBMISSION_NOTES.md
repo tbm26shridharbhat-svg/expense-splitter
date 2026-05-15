@@ -41,6 +41,6 @@ The deployed app talks to a free-tier M0 Atlas cluster.
 
 ## Live URLs
 
-- **Deployed app:** [https://expense-splitter-kxovvf8ja-tbm26shridharbhat-4278s-projects.vercel.app/](https://expense-splitter-kxovvf8ja-tbm26shridharbhat-4278s-projects.vercel.app/)
+- **Deployed app:** [https://expense-splitter-puce-pi.vercel.app/](https://expense-splitter-puce-pi.vercel.app/)
 - **Repo:** <https://github.com/tbm26shridharbhat-svg/expense-splitter>
 
