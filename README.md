@@ -5,6 +5,7 @@ Pocket is not just another expense splitter. It’s an **event-sourced financial
 At any moment, you and your roommates know exactly who owes whom, and you can settle the entire web of debt with one tap.
 
 **Live demo:** [https://expense-splitter-kxovvf8ja-tbm26shridharbhat-4278s-projects.vercel.app/](https://expense-splitter-kxovvf8ja-tbm26shridharbhat-4278s-projects.vercel.app/)
+**Demo video:** [https://www.loom.com/share/bcecfa206b2d4619a124691a08d58d47](https://www.loom.com/share/bcecfa206b2d4619a124691a08d58d47)
 
 ---
 
